@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<title>Greg is Dead</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background: #000;
+    color: #fff;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 40px 24px;
+    user-select: none;
+  }
+  .header {
+    width: 100%;
+    max-width: 380px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-left { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
+  .dot.idle { background: #3a3a3a; }
+  .dot.dead { background: #ef4444; }
+  .label { font-size: 11px; letter-spacing: 0.2em; color: #737373; text-transform: uppercase; }
+  .center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 24px;
+    letter-spacing: -0.01em;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 500;
+    margin: 0;
+    padding: 0 12px;
+  }
+  .ring-wrap { position: relative; display: flex; align-items: center; justify-content: center; transition: filter 0.5s ease; }
+  svg { transform: rotate(-90deg); }
+  circle.progress { transition: stroke-dashoffset 1s linear, stroke 0.5s ease; }
+  .ring-center { position: absolute; display: flex; flex-direction: column; align-items: center; }
+  .time { display: flex; align-items: baseline; gap: 4px; font-size: 36px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .colon { color: #737373; font-size: 24px; }
+  .sub { font-size: 10px; letter-spacing: 0.2em; color: #737373; text-transform: uppercase; margin-top: 8px; }
+  .lastcheckin { font-size: 11px; color: #737373; letter-spacing: 0.02em; }
+  button {
+    width: 100%;
+    max-width: 380px;
+    padding: 16px;
+    border-radius: 16px;
+    border: none;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: 0.01em;
+    background: #fff;
+    color: #000;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  button:active { transform: scale(0.97); }
+  button.dead { background: #ef4444; color: #000; }
+  .footer-note { font-size: 10px; color: #404040; letter-spacing: 0.02em; text-align: center; max-width: 320px; margin-top: 12px; }
+  .loading { min-height: 100dvh; display: flex; align-items: center; justify-content: center; color: #737373; font-size: 14px; letter-spacing: 0.2em; }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+/* ====== CONFIGURE THESE TWO VALUES (see README instructions) ====== */
+const JSONBIN_BIN_ID = "6a76fc75da38895dfec9693c";
+const JSONBIN_API_KEY = "$2a$10$bsZXEyH0JZ0Gu9y0lCnZrOy7AWVXiD6y8zUUAt8.1AQTmY/.F2RkC";
+/* ==================================================================== */
+
+const DURATION_MS = 72 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+
+const app = document.getElementById("app");
+
+let state = { deadline: null, loaded: false };
+
+function getStage(remaining, deadline) {
+  if (!deadline) return { key: "idle", label: "Greg is unmonitored", color: "#737373", ring: "#3a3a3a" };
+  if (remaining <= 0) return { key: "dead", label: "Greg is dead", color: "#ef4444", ring: "#ef4444" };
+  if (remaining < 1 * HOUR) return { key: "verycritical", label: "Greg is about to be presumed dead", color: "#f87171", ring: "#f87171" };
+  if (remaining < 6 * HOUR) return { key: "critical", label: "This isn't looking good", color: "#f87171", ring: "#f87171" };
+  if (remaining < 12 * HOUR) return { key: "warn2", label: "Greg is concerningly quiet", color: "#fb923c", ring: "#fb923c" };
+  if (remaining < 24 * HOUR) return { key: "warn", label: "Greg is getting suspicious", color: "#facc15", ring: "#facc15" };
+  if (remaining < 48 * HOUR) return { key: "ok2", label: "Greg is probably just busy", color: "#a3e635", ring: "#a3e635" };
+  return { key: "ok", label: "Greg is probably alive", color: "#4ade80", ring: "#4ade80" };
+}
+
+function pad(n) { return String(n).padStart(2, "0"); }
+
+function formatRemaining(ms) {
+  if (ms <= 0) return { h: "00", m: "00", s: "00" };
+  const total = Math.floor(ms / 1000);
+  return { h: pad(Math.floor(total / 3600)), m: pad(Math.floor((total % 3600) / 60)), s: pad(total % 60) };
+}
+
+async function loadDeadline() {
+  try {
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
+      headers: { "X-Master-Key": JSONBIN_API_KEY }
+    });
+    const data = await res.json();
+    state.deadline = data?.record?.deadline || null;
+  } catch (e) {
+    console.error("Load failed", e);
+  }
+  state.loaded = true;
+  render();
+}
+
+async function saveDeadline(newDeadline) {
+  try {
+    await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Master-Key": JSONBIN_API_KEY },
+      body: JSON.stringify({ deadline: newDeadline })
+    });
+  } catch (e) {
+    console.error("Save failed", e);
+  }
+}
+
+async function checkIn() {
+  const newDeadline = Date.now() + DURATION_MS;
+  state.deadline = newDeadline;
+  render();
+  await saveDeadline(newDeadline);
+}
+
+function render() {
+  if (!state.loaded) {
+    app.innerHTML = `<div class="loading">LOADING…</div>`;
+    return;
+  }
+
+  const now = Date.now();
+  const remaining = state.deadline ? state.deadline - now : 0;
+  const isDead = state.deadline !== null && remaining <= 0;
+  const pct = state.deadline ? Math.max(0, Math.min(100, (remaining / DURATION_MS) * 100)) : 100;
+  const stage = getStage(remaining, state.deadline);
+  const { h, m, s } = formatRemaining(remaining);
+  const circumference = 2 * Math.PI * 120;
+  const offset = circumference * (1 - pct / 100);
+
+  app.innerHTML = `
+    <div class="header">
+      <div class="header-left">
+        <div class="dot ${stage.key === 'dead' ? 'dead' : stage.key === 'idle' ? 'idle' : ''}"></div>
+        <span class="label">${stage.key === 'dead' ? 'signal lost' : stage.key === 'idle' ? 'not armed' : 'monitoring'}</span>
+      </div>
+      <span class="label">72h switch</span>
+    </div>
+
+    <div class="center">
+      <h1 style="color:${stage.color}">${stage.label}</h1>
+
+      <div class="ring-wrap">
+        <svg width="280" height="280">
+          <circle cx="140" cy="140" r="120" stroke="#1a1a1a" stroke-width="6" fill="none" />
+          <circle class="progress" cx="140" cy="140" r="120" stroke="${stage.ring}" stroke-width="6" fill="none"
+            stroke-linecap="round" stroke-dasharray="${circumference}"
+            stroke-dashoffset="${state.deadline ? offset : 0}" />
+        </svg>
+        <div class="ring-center">
+          ${isDead
+            ? `<div style="font-size:56px;">💀</div>`
+            : `<div class="time"><span>${h}</span><span class="colon">:</span><span>${m}</span><span class="colon">:</span><span>${s}</span></div>
+               <div class="sub">${state.deadline ? "until presumed dead" : "not started"}</div>`
+          }
+        </div>
+      </div>
+
+      ${state.deadline ? `<div class="lastcheckin">last check-in ${new Date(state.deadline - DURATION_MS).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>` : ""}
+    </div>
+
+    <button id="checkin-btn" class="${isDead ? 'dead' : ''}">
+      ${isDead ? "Rise from the dead" : state.deadline ? "Still alive — reset 72h" : "Start the clock"}
+    </button>
+    <div class="footer-note">Tap after you message them. Shared with whoever else has this link — either of you can reset it.</div>
+  `;
+
+  document.getElementById("checkin-btn").onclick = checkIn;
+}
+
+loadDeadline();
+setInterval(() => { if (state.loaded) render(); }, 1000);
+</script>
+</body>
+</html>
