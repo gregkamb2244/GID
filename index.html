@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-<title>Greg is Dead</title>
+<title>Countdown to Jen</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -22,26 +22,30 @@
     justify-content: space-between;
     padding: 40px 24px;
     user-select: none;
+    overflow-x: hidden;
+    position: relative;
   }
   .header {
     width: 100%;
     max-width: 380px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
   }
   .header-left { display: flex; align-items: center; gap: 8px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; transition: background 0.6s ease; }
   .dot.idle { background: #3a3a3a; }
-  .dot.dead { background: #ef4444; }
+  .dot.gold { background: #064e3b; }
   .label { font-size: 11px; letter-spacing: 0.2em; color: #737373; text-transform: uppercase; }
+  .brand-label { font-size: 15px; letter-spacing: 0.2em; color: #a3a3a3; text-transform: uppercase; font-weight: 600; }
   .center {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 32px;
+    gap: 14px;
+    width: 100%;
   }
   h1 {
     text-align: center;
@@ -51,15 +55,19 @@
     font-weight: 500;
     margin: 0;
     padding: 0 12px;
+    transition: color 0.6s ease;
   }
-  .ring-wrap { position: relative; display: flex; align-items: center; justify-content: center; transition: filter 0.5s ease; }
+  .ring-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
   svg { transform: rotate(-90deg); }
-  circle.progress { transition: stroke-dashoffset 1s linear, stroke 0.5s ease; }
+  circle.progress { transition: stroke-dashoffset 1s linear, stroke 0.6s ease; }
   .ring-center { position: absolute; display: flex; flex-direction: column; align-items: center; }
-  .time { display: flex; align-items: baseline; gap: 4px; font-size: 36px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-  .colon { color: #737373; font-size: 24px; }
+  .time { display: flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .time .unit { font-size: 32px; }
+  .time .unit.small { font-size: 24px; }
+  .colon { color: #737373; font-size: 22px; }
   .sub { font-size: 10px; letter-spacing: 0.2em; color: #737373; text-transform: uppercase; margin-top: 8px; }
-  .lastcheckin { font-size: 11px; color: #737373; letter-spacing: 0.02em; }
+  .datefor { font-size: 11px; color: #737373; letter-spacing: 0.02em; }
+
   button {
     width: 100%;
     max-width: 380px;
@@ -75,45 +83,146 @@
     transition: transform 0.15s ease, background 0.15s ease;
   }
   button:active { transform: scale(0.97); }
-  button.dead { background: #ef4444; color: #000; }
+  button.gold { background: #064e3b; color: #d1fae5; }
   .footer-note { font-size: 10px; color: #404040; letter-spacing: 0.02em; text-align: center; max-width: 320px; margin-top: 12px; }
   .loading { min-height: 100dvh; display: flex; align-items: center; justify-content: center; color: #737373; font-size: 14px; letter-spacing: 0.2em; }
+
+  /* Edit form */
+  .form-wrap {
+    width: 100%;
+    max-width: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .field label {
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #737373;
+  }
+  .field input {
+    background: #111;
+    border: 1px solid #262626;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 16px;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  .field input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.6;
+  }
+  .form-buttons {
+    display: flex;
+    gap: 10px;
+  }
+  .form-buttons button.secondary {
+    background: #1a1a1a;
+    color: #a3a3a3;
+  }
+
+  canvas#confetti-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 50;
+  }
 </style>
 </head>
 <body>
 
 <div id="app"></div>
+<canvas id="confetti-canvas"></canvas>
 
 <script>
-/* ====== CONFIGURE THESE TWO VALUES (see README instructions) ====== */
-const JSONBIN_BIN_ID = "6a76fc75da38895dfec9693c";
-const JSONBIN_API_KEY = "$2a$10$bsZXEyH0JZ0Gu9y0lCnZrOy7AWVXiD6y8zUUAt8.1AQTmY/.F2RkC";
-/* ==================================================================== */
-
-const DURATION_MS = 72 * 60 * 60 * 1000;
-const HOUR = 60 * 60 * 1000;
+/* ====== CONFIGURE THESE TWO VALUES ====== */
+const JSONBIN_BIN_ID = "REPLACE_WITH_YOUR_BIN_ID";
+const JSONBIN_API_KEY = "REPLACE_WITH_YOUR_API_KEY";
+/* ========================================= */
 
 const app = document.getElementById("app");
+const confettiCanvas = document.getElementById("confetti-canvas");
 
-let state = { deadline: null, loaded: false };
+// state.record shape: { deadline: number|null, scheduledAt: number|null }
+let state = { deadline: null, scheduledAt: null, loaded: false, mode: "display", confettiFired: false };
 
-function getStage(remaining, deadline) {
-  if (!deadline) return { key: "idle", label: "Greg is unmonitored", color: "#737373", ring: "#3a3a3a" };
-  if (remaining <= 0) return { key: "dead", label: "Greg is dead", color: "#ef4444", ring: "#ef4444" };
-  if (remaining < 1 * HOUR) return { key: "verycritical", label: "Greg is about to be presumed dead", color: "#f87171", ring: "#f87171" };
-  if (remaining < 6 * HOUR) return { key: "critical", label: "This isn't looking good", color: "#f87171", ring: "#f87171" };
-  if (remaining < 12 * HOUR) return { key: "warn2", label: "Greg is concerningly quiet", color: "#fb923c", ring: "#fb923c" };
-  if (remaining < 24 * HOUR) return { key: "warn", label: "Greg is getting suspicious", color: "#facc15", ring: "#facc15" };
-  if (remaining < 48 * HOUR) return { key: "ok2", label: "Greg is probably just busy", color: "#a3e635", ring: "#a3e635" };
-  return { key: "ok", label: "Greg is probably alive", color: "#4ade80", ring: "#4ade80" };
+const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+const MIN = 60 * 1000;
+
+function getStage(pct) {
+  if (pct <= 0) return { label: "Seeing Jen! \u{1F389}", gold: true };
+  if (pct <= 10) return { label: "This is it" };
+  if (pct <= 20) return { label: "So close" };
+  if (pct <= 30) return { label: "This is happening" };
+  if (pct <= 40) return { label: "The wait's almost over" };
+  if (pct <= 50) return { label: "Almost there" };
+  if (pct <= 60) return { label: "Not long now" };
+  if (pct <= 70) return { label: "Patience wearing thin" };
+  if (pct <= 80) return { label: "Yearning, but hopeful" };
+  if (pct <= 90) return { label: "Still yearning" };
+  return { label: "Maximum yearning" };
+}
+
+// Cool -> warm gradient stops, keyed by % of total duration remaining
+// Grey -> Blue -> Purple -> Green -> Yellow -> Gold
+const COLOR_STOPS = [
+  { pct: 100, rgb: [63, 63, 70] },    // dark grey
+  { pct: 90,  rgb: [113, 113, 122] }, // grey
+  { pct: 80,  rgb: [100, 116, 139] }, // blue-grey
+  { pct: 70,  rgb: [37, 99, 235] },   // deep blue
+  { pct: 60,  rgb: [59, 130, 246] },  // blue
+  { pct: 55,  rgb: [99, 102, 241] },  // blue-purple
+  { pct: 50,  rgb: [124, 58, 237] },  // deep purple
+  { pct: 45,  rgb: [168, 85, 247] },  // purple
+  { pct: 40,  rgb: [192, 132, 252] }, // purple-pink
+  { pct: 35,  rgb: [45, 212, 191] },  // teal-green
+  { pct: 28,  rgb: [74, 222, 128] },  // green
+  { pct: 20,  rgb: [163, 230, 53] },  // yellow-green
+  { pct: 14,  rgb: [250, 204, 21] },  // yellow
+  { pct: 8,   rgb: [251, 191, 36] },  // amber
+  { pct: 3,   rgb: [245, 158, 11] },  // warm gold
+  { pct: 0,   rgb: [251, 191, 36] },  // bright gold (arrival)
+];
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function colorForPct(pct) {
+  pct = Math.max(0, Math.min(100, pct));
+  for (let i = 0; i < COLOR_STOPS.length - 1; i++) {
+    const cur = COLOR_STOPS[i];
+    const next = COLOR_STOPS[i + 1];
+    if (pct <= cur.pct && pct >= next.pct) {
+      const span = cur.pct - next.pct;
+      const t = span === 0 ? 0 : (cur.pct - pct) / span;
+      const r = Math.round(lerp(cur.rgb[0], next.rgb[0], t));
+      const g = Math.round(lerp(cur.rgb[1], next.rgb[1], t));
+      const b = Math.round(lerp(cur.rgb[2], next.rgb[2], t));
+      return `rgb(${r},${g},${b})`;
+    }
+  }
+  const last = COLOR_STOPS[COLOR_STOPS.length - 1];
+  return `rgb(${last.rgb[0]},${last.rgb[1]},${last.rgb[2]})`;
 }
 
 function pad(n) { return String(n).padStart(2, "0"); }
 
 function formatRemaining(ms) {
-  if (ms <= 0) return { h: "00", m: "00", s: "00" };
-  const total = Math.floor(ms / 1000);
-  return { h: pad(Math.floor(total / 3600)), m: pad(Math.floor((total % 3600) / 60)), s: pad(total % 60) };
+  if (ms <= 0) return null;
+  const totalSec = Math.floor(ms / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+  const secs = totalSec % 60;
+  return { days, hours: pad(hours), mins: pad(mins), secs: pad(secs) };
 }
 
 async function loadDeadline() {
@@ -123,6 +232,7 @@ async function loadDeadline() {
     });
     const data = await res.json();
     state.deadline = data?.record?.deadline || null;
+    state.scheduledAt = data?.record?.scheduledAt || null;
   } catch (e) {
     console.error("Load failed", e);
   }
@@ -130,23 +240,240 @@ async function loadDeadline() {
   render();
 }
 
-async function saveDeadline(newDeadline) {
+async function saveDeadline(deadline, scheduledAt) {
   try {
     await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-Master-Key": JSONBIN_API_KEY },
-      body: JSON.stringify({ deadline: newDeadline })
+      body: JSON.stringify({ deadline, scheduledAt })
     });
   } catch (e) {
     console.error("Save failed", e);
   }
 }
 
-async function checkIn() {
-  const newDeadline = Date.now() + DURATION_MS;
-  state.deadline = newDeadline;
+function openEditor() {
+  state.mode = "editing";
   render();
-  await saveDeadline(newDeadline);
+}
+
+function cancelEditor() {
+  state.mode = "display";
+  render();
+}
+
+async function confirmDate() {
+  const dateVal = document.getElementById("jen-date").value;
+  const timeVal = document.getElementById("jen-time").value;
+  if (!dateVal || !timeVal) return;
+  const combined = new Date(`${dateVal}T${timeVal}`);
+  const deadline = combined.getTime();
+  if (isNaN(deadline)) return;
+
+  const scheduledAt = Date.now();
+  state.deadline = deadline;
+  state.scheduledAt = scheduledAt;
+  state.mode = "display";
+  state.confettiFired = false;
+  render();
+  await saveDeadline(deadline, scheduledAt);
+}
+
+/* ---------- Confetti ---------- */
+let confettiParticles = [];
+let confettiRunning = false;
+
+function fireConfetti() {
+  const ctx = confettiCanvas.getContext("2d");
+  confettiCanvas.width = window.innerWidth;
+  confettiCanvas.height = window.innerHeight;
+
+  const colors = ["#047857", "#059669", "#10b981", "#34d399", "#6ee7b7", "#fff"];
+  confettiParticles = [];
+  const count = 140;
+  for (let i = 0; i < count; i++) {
+    confettiParticles.push({
+      x: confettiCanvas.width / 2,
+      y: confettiCanvas.height / 2,
+      vx: (Math.random() - 0.5) * 16,
+      vy: (Math.random() - 1.6) * 16,
+      size: 5 + Math.random() * 6,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rotation: Math.random() * 360,
+      rotSpeed: (Math.random() - 0.5) * 12,
+      gravity: 0.35 + Math.random() * 0.15,
+      life: 0,
+      maxLife: 140 + Math.random() * 60,
+    });
+  }
+
+  if (!confettiRunning) {
+    confettiRunning = true;
+    requestAnimationFrame(confettiTick);
+  }
+}
+
+function confettiTick() {
+  const ctx = confettiCanvas.getContext("2d");
+  ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+
+  let alive = false;
+  for (const p of confettiParticles) {
+    if (p.life >= p.maxLife) continue;
+    alive = true;
+    p.vy += p.gravity;
+    p.x += p.vx;
+    p.y += p.vy;
+    p.rotation += p.rotSpeed;
+    p.life++;
+
+    const opacity = Math.max(0, 1 - p.life / p.maxLife);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate((p.rotation * Math.PI) / 180);
+    ctx.globalAlpha = opacity;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+    ctx.restore();
+  }
+
+  if (alive) {
+    requestAnimationFrame(confettiTick);
+  } else {
+    confettiRunning = false;
+    ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+  }
+}
+
+/* ---------- Render ---------- */
+function renderEditor() {
+  const now = new Date();
+  const defaultDate = state.deadline ? new Date(state.deadline) : now;
+  const dateStr = defaultDate.toISOString().slice(0, 10);
+  const hh = pad(defaultDate.getHours());
+  const mm = pad(defaultDate.getMinutes());
+
+  app.innerHTML = `
+    <div class="header">
+      <span class="brand-label">countdown to jen</span>
+    </div>
+
+    <div class="center">
+      <h1>When do you see Jen next?</h1>
+      <div class="form-wrap">
+        <div class="field">
+          <label for="jen-date">Date</label>
+          <input type="date" id="jen-date" value="${dateStr}" />
+        </div>
+        <div class="field">
+          <label for="jen-time">Time</label>
+          <input type="time" id="jen-time" value="${hh}:${mm}" />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-wrap">
+      <div class="form-buttons">
+        ${state.deadline ? `<button class="secondary" id="cancel-btn">Cancel</button>` : ``}
+        <button id="confirm-btn">Confirm</button>
+      </div>
+      <div class="footer-note">Shared with whoever else has this link — either of you can set or change it.</div>
+    </div>
+  `;
+
+  document.getElementById("confirm-btn").onclick = confirmDate;
+  const cancelBtn = document.getElementById("cancel-btn");
+  if (cancelBtn) cancelBtn.onclick = cancelEditor;
+}
+
+function renderDisplay() {
+  const now = Date.now();
+  const hasDeadline = state.deadline !== null;
+  const remaining = hasDeadline ? state.deadline - now : null;
+  const isZero = hasDeadline && remaining <= 0;
+
+  let pct = 100;
+  if (hasDeadline && state.scheduledAt) {
+    const total = state.deadline - state.scheduledAt;
+    if (total > 0) pct = Math.max(0, Math.min(100, (remaining / total) * 100));
+  }
+  const ringColor = hasDeadline ? colorForPct(pct) : "#3a3a3a";
+
+  const stage = hasDeadline
+    ? getStage(pct)
+    : { label: "No date set yet" };
+
+  if (isZero && !state.confettiFired) {
+    state.confettiFired = true;
+    setTimeout(fireConfetti, 150);
+  }
+  if (!isZero) state.confettiFired = false;
+
+  const circumference = 2 * Math.PI * 120;
+  const offset = hasDeadline ? circumference * (1 - pct / 100) : 0;
+
+  let timeHtml;
+  if (!hasDeadline) {
+    timeHtml = `<div class="sub">not started</div>`;
+  } else if (isZero) {
+    timeHtml = `<div style="font-size:56px;">\u{1F344}</div>`;
+  } else {
+    const t = formatRemaining(remaining);
+    if (t.days > 0) {
+      timeHtml = `
+        <div class="time">
+          <span class="unit">${t.days}<span class="unit small">d</span></span>
+          <span class="colon">:</span>
+          <span class="unit">${t.hours}<span class="unit small">h</span></span>
+          <span class="colon">:</span>
+          <span class="unit">${t.mins}<span class="unit small">m</span></span>
+        </div>
+        <div class="sub">until Jen</div>
+      `;
+    } else {
+      timeHtml = `
+        <div class="time">
+          <span class="unit">${t.hours}</span><span class="colon">:</span>
+          <span class="unit">${t.mins}</span><span class="colon">:</span>
+          <span class="unit">${t.secs}</span>
+        </div>
+        <div class="sub">until Jen</div>
+      `;
+    }
+  }
+
+  const buttonLabel = !hasDeadline
+    ? "Set next Jen date"
+    : isZero
+    ? "Set next date"
+    : "Reschedule";
+
+  app.innerHTML = `
+    <div class="header">
+      <span class="brand-label">countdown to jen</span>
+    </div>
+
+    <div class="center">
+      <h1 style="color:${hasDeadline ? ringColor : "#737373"}">${stage.label}</h1>
+
+      <div class="ring-wrap">
+        <svg width="280" height="280">
+          <circle cx="140" cy="140" r="120" stroke="#1a1a1a" stroke-width="6" fill="none" />
+          <circle class="progress" cx="140" cy="140" r="120" stroke="${ringColor}" stroke-width="6" fill="none"
+            stroke-linecap="round" stroke-dasharray="${circumference}"
+            stroke-dashoffset="${hasDeadline ? offset : 0}" />
+        </svg>
+        <div class="ring-center">${timeHtml}</div>
+      </div>
+
+      ${hasDeadline && !isZero ? `<div class="datefor">${new Date(state.deadline).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>` : ""}
+    </div>
+
+    <button id="action-btn" class="${isZero ? "gold" : ""}">${buttonLabel}</button>
+    <div class="footer-note">Shared with whoever else has this link — either of you can set or change it.</div>
+  `;
+
+  document.getElementById("action-btn").onclick = openEditor;
 }
 
 function render() {
@@ -154,58 +481,21 @@ function render() {
     app.innerHTML = `<div class="loading">LOADING…</div>`;
     return;
   }
-
-  const now = Date.now();
-  const remaining = state.deadline ? state.deadline - now : 0;
-  const isDead = state.deadline !== null && remaining <= 0;
-  const pct = state.deadline ? Math.max(0, Math.min(100, (remaining / DURATION_MS) * 100)) : 100;
-  const stage = getStage(remaining, state.deadline);
-  const { h, m, s } = formatRemaining(remaining);
-  const circumference = 2 * Math.PI * 120;
-  const offset = circumference * (1 - pct / 100);
-
-  app.innerHTML = `
-    <div class="header">
-      <div class="header-left">
-        <div class="dot ${stage.key === 'dead' ? 'dead' : stage.key === 'idle' ? 'idle' : ''}"></div>
-        <span class="label">${stage.key === 'dead' ? 'signal lost' : stage.key === 'idle' ? 'not armed' : 'monitoring'}</span>
-      </div>
-      <span class="label">72h switch</span>
-    </div>
-
-    <div class="center">
-      <h1 style="color:${stage.color}">${stage.label}</h1>
-
-      <div class="ring-wrap">
-        <svg width="280" height="280">
-          <circle cx="140" cy="140" r="120" stroke="#1a1a1a" stroke-width="6" fill="none" />
-          <circle class="progress" cx="140" cy="140" r="120" stroke="${stage.ring}" stroke-width="6" fill="none"
-            stroke-linecap="round" stroke-dasharray="${circumference}"
-            stroke-dashoffset="${state.deadline ? offset : 0}" />
-        </svg>
-        <div class="ring-center">
-          ${isDead
-            ? `<div style="font-size:56px;">💀</div>`
-            : `<div class="time"><span>${h}</span><span class="colon">:</span><span>${m}</span><span class="colon">:</span><span>${s}</span></div>
-               <div class="sub">${state.deadline ? "until presumed dead" : "not started"}</div>`
-          }
-        </div>
-      </div>
-
-      ${state.deadline ? `<div class="lastcheckin">last check-in ${new Date(state.deadline - DURATION_MS).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>` : ""}
-    </div>
-
-    <button id="checkin-btn" class="${isDead ? 'dead' : ''}">
-      ${isDead ? "Rise from the dead" : state.deadline ? "Still alive — reset 72h" : "Start the clock"}
-    </button>
-    <div class="footer-note">Tap after you message them. Shared with whoever else has this link — either of you can reset it.</div>
-  `;
-
-  document.getElementById("checkin-btn").onclick = checkIn;
+  if (state.mode === "editing") {
+    renderEditor();
+  } else {
+    renderDisplay();
+  }
 }
 
 loadDeadline();
-setInterval(() => { if (state.loaded) render(); }, 1000);
+setInterval(() => { if (state.loaded && state.mode === "display") render(); }, 1000);
+window.addEventListener("resize", () => {
+  if (confettiRunning) {
+    confettiCanvas.width = window.innerWidth;
+    confettiCanvas.height = window.innerHeight;
+  }
+});
 </script>
 </body>
 </html>
