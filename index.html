@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-<title>Countdown to Jen</title>
+<title>Countdown to Greg & Jen</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -144,8 +144,8 @@
 
 <script>
 /* ====== CONFIGURE THESE TWO VALUES ====== */
-const JSONBIN_BIN_ID = "6a87a4ffda38895dfefda02d";
-const JSONBIN_API_KEY = "$2a$10$bsZXEyH0JZ0Gu9y0lCnZrOy7AWVXiD6y8zUUAt8.1AQTmY/.F2RkC";
+const JSONBIN_BIN_ID = "6a8e3e12da38895dfe10f53b";
+const JSONBIN_ACCESS_KEY = "$2a$10$jO5wf4Ug.zm9BntxIOUeAOzapGN8KzFJ2oc66c7nYDKhmSjSH6roG";
 /* ========================================= */
 
 const app = document.getElementById("app");
@@ -164,7 +164,6 @@ function getStage(pct) {
   if (pct <= 20) return { label: "So close" };
   if (pct <= 30) return { label: "This is happening" };
   if (pct <= 40) return { label: "The wait's almost over" };
-  if (pct <= 50) return { label: "Almost there" };
   if (pct <= 60) return { label: "Not long now" };
   if (pct <= 70) return { label: "Patience wearing thin" };
   if (pct <= 80) return { label: "Yearning, but hopeful" };
@@ -228,7 +227,7 @@ function formatRemaining(ms) {
 async function loadDeadline() {
   try {
     const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
-      headers: { "X-Master-Key": JSONBIN_API_KEY }
+      headers: { "X-Access-Key": JSONBIN_ACCESS_KEY }
     });
     const data = await res.json();
     state.deadline = data?.record?.deadline || null;
@@ -244,7 +243,7 @@ async function saveDeadline(deadline, scheduledAt) {
   try {
     await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", "X-Master-Key": JSONBIN_API_KEY },
+      headers: { "Content-Type": "application/json", "X-Access-Key": JSONBIN_ACCESS_KEY },
       body: JSON.stringify({ deadline, scheduledAt })
     });
   } catch (e) {
@@ -355,7 +354,7 @@ function renderEditor() {
 
   app.innerHTML = `
     <div class="header">
-      <span class="brand-label">countdown to jen</span>
+      <span class="brand-label">countdown to greg &amp; jen</span>
     </div>
 
     <div class="center">
@@ -450,7 +449,7 @@ function renderDisplay() {
 
   app.innerHTML = `
     <div class="header">
-      <span class="brand-label">countdown to jen</span>
+      <span class="brand-label">countdown to greg &amp; jen</span>
     </div>
 
     <div class="center">
