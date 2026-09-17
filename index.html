@@ -358,7 +358,7 @@ function renderEditor() {
     </div>
 
     <div class="center">
-      <h1>When do you see Jen next?</h1>
+      <h1>When are we meeting next?</h1>
       <div class="form-wrap">
         <div class="field">
           <label for="jen-date">Date</label>
@@ -427,7 +427,7 @@ function renderDisplay() {
           <span class="colon">:</span>
           <span class="unit">${t.mins}<span class="unit small">m</span></span>
         </div>
-        <div class="sub">until Jen</div>
+        <div class="sub">until christmas</div>
       `;
     } else {
       timeHtml = `
@@ -436,13 +436,13 @@ function renderDisplay() {
           <span class="unit">${t.mins}</span><span class="colon">:</span>
           <span class="unit">${t.secs}</span>
         </div>
-        <div class="sub">until Jen</div>
+        <div class="sub">until christmas</div>
       `;
     }
   }
 
   const buttonLabel = !hasDeadline
-    ? "Set next Jen date"
+    ? "Set next date"
     : isZero
     ? "Set next date"
     : "Reschedule";
