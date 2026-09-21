@@ -32,11 +32,6 @@
     align-items: center;
     justify-content: center;
   }
-  .header-left { display: flex; align-items: center; gap: 8px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; transition: background 0.6s ease; }
-  .dot.idle { background: #3a3a3a; }
-  .dot.gold { background: #064e3b; }
-  .label { font-size: 11px; letter-spacing: 0.2em; color: #737373; text-transform: uppercase; }
   .brand-label { font-size: 15px; letter-spacing: 0.2em; color: #a3a3a3; text-transform: uppercase; font-weight: 600; }
   .center {
     flex: 1;
@@ -95,11 +90,7 @@
     flex-direction: column;
     gap: 16px;
   }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
   .field label {
     font-size: 11px;
     letter-spacing: 0.15em;
@@ -115,18 +106,9 @@
     color: #fff;
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   }
-  .field input::-webkit-calendar-picker-indicator {
-    filter: invert(1);
-    opacity: 0.6;
-  }
-  .form-buttons {
-    display: flex;
-    gap: 10px;
-  }
-  .form-buttons button.secondary {
-    background: #1a1a1a;
-    color: #a3a3a3;
-  }
+  .field input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; }
+  .form-buttons { display: flex; gap: 10px; }
+  .form-buttons button.secondary { background: #1a1a1a; color: #a3a3a3; }
 
   canvas#confetti-canvas {
     position: fixed;
@@ -135,6 +117,26 @@
     pointer-events: none;
     z-index: 50;
   }
+
+  .toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: #111;
+    border: 1px solid #262626;
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    z-index: 60;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -143,20 +145,17 @@
 <canvas id="confetti-canvas"></canvas>
 
 <script>
-/* ====== CONFIGURE THESE TWO VALUES ====== */
-const JSONBIN_BIN_ID = "6a8e3e12da38895dfe10f53b";
-const JSONBIN_ACCESS_KEY = "$2a$10$jO5wf4Ug.zm9BntxIOUeAOzapGN8KzFJ2oc66c7nYDKhmSjSH6roG";
-/* ========================================= */
+/* ====== FIREBASE REALTIME DATABASE ====== */
+const FIREBASE_DB_URL = "https://countdowngj-default-rtdb.asia-southeast1.firebasedatabase.app";
+const DATA_URL = `${FIREBASE_DB_URL}/countdown.json`;
+/* ======================================== */
 
+const CACHE_KEY = "cgj_countdown_cache";
 const app = document.getElementById("app");
 const confettiCanvas = document.getElementById("confetti-canvas");
 
-// state.record shape: { deadline: number|null, scheduledAt: number|null }
+// Shared record shape: { deadline: number, scheduledAt: number }
 let state = { deadline: null, scheduledAt: null, loaded: false, mode: "display", confettiFired: false };
-
-const DAY = 24 * 60 * 60 * 1000;
-const HOUR = 60 * 60 * 1000;
-const MIN = 60 * 1000;
 
 function getStage(pct) {
   if (pct <= 0) return { label: "Together again! \u{1F389}", gold: true };
@@ -172,7 +171,6 @@ function getStage(pct) {
 }
 
 // Cool -> warm gradient stops, keyed by % of total duration remaining
-// Grey -> Blue -> Purple -> Green -> Yellow -> Gold
 const COLOR_STOPS = [
   { pct: 100, rgb: [63, 63, 70] },    // dark grey
   { pct: 90,  rgb: [113, 113, 122] }, // grey
@@ -224,33 +222,115 @@ function formatRemaining(ms) {
   return { days, hours: pad(hours), mins: pad(mins), secs: pad(secs) };
 }
 
-async function loadDeadline() {
+/* ---------- Toast ---------- */
+let toastTimeout;
+function showToast(msg) {
+  let el = document.getElementById("toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toast";
+    el.className = "toast";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  clearTimeout(toastTimeout);
+  requestAnimationFrame(() => el.classList.add("show"));
+  toastTimeout = setTimeout(() => el.classList.remove("show"), 2600);
+}
+
+/* ---------- Local cache (keeps the countdown working if the database is unreachable) ---------- */
+function applyRecord(rec) {
+  state.deadline = (rec && typeof rec.deadline === "number") ? rec.deadline : null;
+  state.scheduledAt = (rec && typeof rec.scheduledAt === "number") ? rec.scheduledAt : null;
+}
+
+function cacheRecord() {
   try {
-    const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
-      headers: { "X-Access-Key": JSONBIN_ACCESS_KEY }
-    });
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ deadline: state.deadline, scheduledAt: state.scheduledAt }));
+  } catch (e) {}
+}
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (raw) {
+      applyRecord(JSON.parse(raw));
+      state.loaded = true;
+    }
+  } catch (e) {}
+}
+
+/* ---------- Firebase ---------- */
+async function loadDeadline() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(DATA_URL, { signal: controller.signal });
+    if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    state.deadline = data?.record?.deadline || null;
-    state.scheduledAt = data?.record?.scheduledAt || null;
+    applyRecord(data);
+    cacheRecord();
   } catch (e) {
     console.error("Load failed", e);
   }
+  clearTimeout(timer);
   state.loaded = true;
-  render();
+  if (state.mode === "display") render();
 }
 
 async function saveDeadline(deadline, scheduledAt) {
   try {
-    await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
+    const res = await fetch(DATA_URL, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", "X-Access-Key": JSONBIN_ACCESS_KEY },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ deadline, scheduledAt })
     });
+    if (!res.ok) throw new Error("HTTP " + res.status);
   } catch (e) {
     console.error("Save failed", e);
+    showToast("Couldn't sync, check your connection");
   }
 }
 
+// Live updates: if the other person changes the date, this screen updates straight away
+function handleStreamEvent(e, isPatch) {
+  try {
+    const msg = JSON.parse(e.data); // { path, data }
+    if (!msg) return;
+    if (msg.path === "/") {
+      if (isPatch) {
+        const d = msg.data || {};
+        if ("deadline" in d) state.deadline = typeof d.deadline === "number" ? d.deadline : null;
+        if ("scheduledAt" in d) state.scheduledAt = typeof d.scheduledAt === "number" ? d.scheduledAt : null;
+      } else {
+        applyRecord(msg.data);
+      }
+    } else {
+      const key = msg.path.replace(/^\//, "");
+      if (key === "deadline" || key === "scheduledAt") {
+        state[key] = typeof msg.data === "number" ? msg.data : null;
+      }
+    }
+    state.loaded = true;
+    cacheRecord();
+    if (state.mode === "display") render();
+  } catch (err) {
+    console.error("Stream parse failed", err);
+  }
+}
+
+function startLiveSync() {
+  if (!window.EventSource) return;
+  try {
+    const es = new EventSource(DATA_URL);
+    es.addEventListener("put", (e) => handleStreamEvent(e, false));
+    es.addEventListener("patch", (e) => handleStreamEvent(e, true));
+  } catch (e) {
+    console.error("Live sync unavailable", e);
+  }
+}
+
+/* ---------- Editing ---------- */
 function openEditor() {
   state.mode = "editing";
   render();
@@ -265,8 +345,7 @@ async function confirmDate() {
   const dateVal = document.getElementById("jen-date").value;
   const timeVal = document.getElementById("jen-time").value;
   if (!dateVal || !timeVal) return;
-  const combined = new Date(`${dateVal}T${timeVal}`);
-  const deadline = combined.getTime();
+  const deadline = new Date(`${dateVal}T${timeVal}`).getTime();
   if (isNaN(deadline)) return;
 
   const scheduledAt = Date.now();
@@ -274,6 +353,7 @@ async function confirmDate() {
   state.scheduledAt = scheduledAt;
   state.mode = "display";
   state.confettiFired = false;
+  cacheRecord();
   render();
   await saveDeadline(deadline, scheduledAt);
 }
@@ -283,14 +363,12 @@ let confettiParticles = [];
 let confettiRunning = false;
 
 function fireConfetti() {
-  const ctx = confettiCanvas.getContext("2d");
   confettiCanvas.width = window.innerWidth;
   confettiCanvas.height = window.innerHeight;
 
   const colors = ["#047857", "#059669", "#10b981", "#34d399", "#6ee7b7", "#fff"];
   confettiParticles = [];
-  const count = 140;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < 140; i++) {
     confettiParticles.push({
       x: confettiCanvas.width / 2,
       y: confettiCanvas.height / 2,
@@ -326,11 +404,10 @@ function confettiTick() {
     p.rotation += p.rotSpeed;
     p.life++;
 
-    const opacity = Math.max(0, 1 - p.life / p.maxLife);
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate((p.rotation * Math.PI) / 180);
-    ctx.globalAlpha = opacity;
+    ctx.globalAlpha = Math.max(0, 1 - p.life / p.maxLife);
     ctx.fillStyle = p.color;
     ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
     ctx.restore();
@@ -346,9 +423,8 @@ function confettiTick() {
 
 /* ---------- Render ---------- */
 function renderEditor() {
-  const now = new Date();
-  const defaultDate = state.deadline ? new Date(state.deadline) : now;
-  const dateStr = defaultDate.toISOString().slice(0, 10);
+  const defaultDate = state.deadline ? new Date(state.deadline) : new Date();
+  const dateStr = `${defaultDate.getFullYear()}-${pad(defaultDate.getMonth() + 1)}-${pad(defaultDate.getDate())}`;
   const hh = pad(defaultDate.getHours());
   const mm = pad(defaultDate.getMinutes());
 
@@ -396,11 +472,9 @@ function renderDisplay() {
     const total = state.deadline - state.scheduledAt;
     if (total > 0) pct = Math.max(0, Math.min(100, (remaining / total) * 100));
   }
+  if (isZero) pct = 0;
   const ringColor = hasDeadline ? colorForPct(pct) : "#3a3a3a";
-
-  const stage = hasDeadline
-    ? getStage(pct)
-    : { label: "No date set yet" };
+  const stage = hasDeadline ? getStage(pct) : { label: "No date set yet" };
 
   if (isZero && !state.confettiFired) {
     state.confettiFired = true;
@@ -441,11 +515,7 @@ function renderDisplay() {
     }
   }
 
-  const buttonLabel = !hasDeadline
-    ? "Set next date"
-    : isZero
-    ? "Set next date"
-    : "Reschedule";
+  const buttonLabel = hasDeadline && !isZero ? "Reschedule" : "Set next date";
 
   app.innerHTML = `
     <div class="header">
@@ -487,7 +557,17 @@ function render() {
   }
 }
 
-loadDeadline();
+/* ---------- Start ---------- */
+loadCache();     // show the last known date instantly, even offline
+render();        // never a blank screen
+loadDeadline();  // then fetch the latest from Firebase
+startLiveSync(); // and keep listening for changes
+
+// Refresh when the app is reopened from the home screen
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") loadDeadline();
+});
+
 setInterval(() => { if (state.loaded && state.mode === "display") render(); }, 1000);
 window.addEventListener("resize", () => {
   if (confettiRunning) {
